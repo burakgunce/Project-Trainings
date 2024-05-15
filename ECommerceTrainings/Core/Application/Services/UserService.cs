@@ -9,33 +9,36 @@ namespace ECommerceTrainings.Core.Application.Services
     internal class UserService
     {
         /*
-         * public class UserService : IUserService
+         *
+         *public class UserService : IUserService
 {
-    readonly UserManager<Domain.Entities.Identity.AppUser> _userManager; // Kullanıcı yöneticisi
-    readonly IEndpointReadRepository _endpointReadRepository; // Uç nokta okuma deposu
+    // UserManager ve IEndpointReadRepository bağımlılıklarını enjekte ediyoruz.
+    readonly UserManager<Domain.Entities.Identity.AppUser> _userManager;
+    readonly IEndpointReadRepository _endpointReadRepository;
 
-    // Constructor: Kullanıcı yöneticisi ve uç nokta okuma deposu enjekte edilir
     public UserService(UserManager<AppUser> userManager, IEndpointReadRepository endpointReadRepository)
     {
+        // Bağımlılıkları sınıf içindeki private alanlara atıyoruz.
         _userManager = userManager;
         _endpointReadRepository = endpointReadRepository;
     }
 
-    // Yeni bir kullanıcı oluşturur
     public async Task<CreateUserResponse> CreateAsync(CreateUser model)
     {
-        // Kullanıcıyı oluşturur
+        // Yeni bir kullanıcı oluşturmak için UserManager'ı kullanıyoruz.
         IdentityResult result = await _userManager.CreateAsync(new()
         {
+            // Yeni kullanıcının bilgilerini model nesnesinden alıyoruz.
             Id = Guid.NewGuid().ToString(),
             UserName = model.Username,
             Email = model.Email,
             NameSurname = model.NameSurname
         }, model.Password);
 
-        // Oluşturma işleminin sonucunu ve mesajını döndürür
+        // Oluşturma işleminin sonucuna göre bir yanıt oluşturuyoruz.
         CreateUserResponse response = new() { Succeeded = result.Succeeded };
 
+        // Oluşturma başarılıysa bir mesaj atıyoruz, aksi halde hata mesajlarını ekliyoruz.
         if (result.Succeeded)
             response.Message = "User has been created successfully";
         else
@@ -45,16 +48,29 @@ namespace ECommerceTrainings.Core.Application.Services
         return response;
     }
 
-    // Kullanıcının parola sıfırlama işlemini gerçekleştirir
+    public async Task UpdateRefreshTokenAsync(string refreshToken, AppUser user, DateTime accessTokenDate, int addOnAccessTokenDate)
+    {
+        if (user != null)
+        {
+            // Kullanıcının yenileme belirtecini güncelliyoruz.
+            user.RefreshToken = refreshToken;
+            user.RefreshTokenEndDate = accessTokenDate.AddSeconds(addOnAccessTokenDate);
+            await _userManager.UpdateAsync(user);
+        }
+        // Kullanıcı bulunamazsa bir hata fırlatıyoruz.
+        throw new NotFoundUserException();
+    }
+
     public async Task UpdatePasswordAsync(string userId, string resetToken, string newPassword)
     {
-        // Kullanıcıyı kimlik bilgisine göre bulur
+        // Kullanıcıyı kullanıcı kimliğine göre buluyoruz.
         AppUser user = await _userManager.FindByIdAsync(userId);
         if (user != null)
         {
-            // Parolayı sıfırlar
+            // Şifreyi sıfırlıyoruz.
             resetToken = resetToken.UrlDecode();
             IdentityResult result = await _userManager.ResetPasswordAsync(user, resetToken, newPassword);
+            // Şifre sıfırlama işlemi başarısız olursa bir hata fırlatıyoruz.
             if (result.Succeeded)
                 await _userManager.UpdateSecurityStampAsync(user);
             else
@@ -62,16 +78,14 @@ namespace ECommerceTrainings.Core.Application.Services
         }
     }
 
-    // Kullanıcıların belirli bir sayfa ve boyutta listesini alır
     public async Task<List<ListUser>> GetAllUsersAsync(int page, int size)
     {
-        // Kullanıcıları belirli bir sayfa ve boyutta alır
+        // Tüm kullanıcıları alıyoruz ve sayfalama yapıyoruz.
         var users = await _userManager.Users
               .Skip(page * size)
               .Take(size)
               .ToListAsync();
 
-        // Kullanıcıları belirli bir modele dönüştürür ve döndürür
         return users.Select(user => new ListUser
         {
             Id = user.Id,
@@ -83,14 +97,14 @@ namespace ECommerceTrainings.Core.Application.Services
         }).ToList();
     }
 
-    // Kullanıcıya rol atar
+    public int TotalUsersCount => _userManager.Users.Count();
+
     public async Task AssignRoleToUserAsnyc(string userId, string[] roles)
     {
-        // Kullanıcıyı kimlik bilgisine göre bulur
+        // Kullanıcıya roller atıyoruz.
         AppUser user = await _userManager.FindByIdAsync(userId);
         if (user != null)
         {
-            // Kullanıcının mevcut rollerini kaldırır ve yeni rolleri ekler
             var userRoles = await _userManager.GetRolesAsync(user);
             await _userManager.RemoveFromRolesAsync(user, userRoles);
 
@@ -98,15 +112,13 @@ namespace ECommerceTrainings.Core.Application.Services
         }
     }
 
-    // Kullanıcının rollerini alır
     public async Task<string[]> GetRolesToUserAsync(string userIdOrName)
     {
-        // Kullanıcıyı kimlik bilgisine göre veya kullanıcı adına göre bulur
+        // Kullanıcıya ait rolleri alıyoruz.
         AppUser user = await _userManager.FindByIdAsync(userIdOrName);
         if (user == null)
             user = await _userManager.FindByNameAsync(userIdOrName);
 
-        // Kullanıcının rollerini döndürür
         if (user != null)
         {
             var userRoles = await _userManager.GetRolesAsync(user);
@@ -115,28 +127,27 @@ namespace ECommerceTrainings.Core.Application.Services
         return new string[] { };
     }
 
-    // Kullanıcının belirli bir uç noktaya rol izni olup olmadığını kontrol eder
     public async Task<bool> HasRolePermissionToEndpointAsync(string name, string code)
     {
-        // Kullanıcının rollerini alır
+        // Bir kullanıcının belirli bir uç noktaya erişim izni olup olmadığını kontrol ediyoruz.
         var userRoles = await GetRolesToUserAsync(name);
 
         if (!userRoles.Any())
             return false;
 
-        // Uç noktayı koduna göre bulur
         Endpoint? endpoint = await _endpointReadRepository.Table
                  .Include(e => e.Roles)
                  .FirstOrDefaultAsync(e => e.Code == code);
 
-        // Uç nokta var mı kontrol eder
         if (endpoint == null)
             return false;
 
-        // Kullanıcı rolleri ve uç nokta rolleri arasında eşleşme var mı kontrol eder
+        var hasRole = false;
+        var endpointRoles = endpoint.Roles.Select(r => r.Name);
+
         foreach (var userRole in userRoles)
         {
-            foreach (var endpointRole in endpoint.Roles.Select(r => r.Name))
+            foreach (var endpointRole in endpointRoles)
                 if (userRole == endpointRole)
                     return true;
         }
@@ -145,7 +156,6 @@ namespace ECommerceTrainings.Core.Application.Services
     }
 }
 
-         * 
          * 
          * 
          */

@@ -14,42 +14,67 @@ namespace ECommerceTrainings.Core.Application.Token
 {
     readonly IConfiguration _configuration;
 
-    // Constructor: Configuration enjekte edilir
     public TokenHandler(IConfiguration configuration)
     {
         _configuration = configuration;
     }
 
-    // Erişim belgesi oluşturur
+    // Erişim belirteci oluşturma işlemi
     public Application.DTOs.Token CreateAccessToken(int second, AppUser user)
     {
+        // Yeni bir erişim belirteci nesnesi oluşturulur
         Application.DTOs.Token token = new();
 
-        // Güvenlik anahtarı oluşturulur
+        // Güvenlik anahtarı oluşturulur. Güvenlik anahtarı, belirtecin imzalanması için kullanılacak gizli anahtardır.
         SymmetricSecurityKey securityKey = new(Encoding.UTF8.GetBytes(_configuration["Token:SecurityKey"]));
 
-        // İmzalama kimlik bilgileri oluşturulur
+        // Belirtecin imzalanması için gerekli olan imza bilgileri oluşturulur.
         SigningCredentials signingCredentials = new(securityKey, SecurityAlgorithms.HmacSha256);
 
-        // Token'in son kullanma tarihini belirler
+        // Belirtecin geçerlilik süresi belirlenir. Bu, belirtecin son kullanma tarihini belirler.
         token.Expiration = DateTime.UtcNow.AddSeconds(second);
         
-        // JWT güvenlik belgesi oluşturulur
+        // JWT (JSON Web Token) güvenlik belirteci oluşturulur.
         JwtSecurityToken securityToken = new(
+            // Belirtecin hedef kitlesi (audience) belirlenir. Bu, belirtecin hangi uygulamalar tarafından kullanılabileceğini belirler.
             audience: _configuration["Token:Audience"],
+            // Belirtecin yayıncısı (issuer) belirlenir. Bu, belirtecin kim tarafından oluşturulduğunu belirler.
             issuer: _configuration["Token:Issuer"],
+            // Belirtecin son kullanma tarihi belirlenir.
             expires: token.Expiration,
-            notBefore: DateTime.UtcNow
+            // Belirtecin geçerlilik tarih aralığı belirlenir. Bu, belirtecin ne zaman kullanılabileceğini belirler.
+            notBefore: DateTime.UtcNow,
+            // Belirtecin imza bilgileri belirlenir.
+            signingCredentials: signingCredentials,
+            // Belirtecin içinde bulunacak ek bilgiler (claims) belirlenir. Burada kullanıcı adı (user.UserName) belirtilir.
+            claims: new List<Claim> { new(ClaimTypes.Name, user.UserName)}
             );
 
-        // JWT güvenlik belgesi yazıcı oluşturulur
+        // JWT belirteci işleyicisi oluşturulur.
         JwtSecurityTokenHandler tokenHandler = new();
-        // Erişim belgesini yazılı bir JWT belgesine dönüştürür
+        // JWT belirteci yazılır ve erişim belirtecine atanır.
         token.AccessToken = tokenHandler.WriteToken(securityToken);
 
+        // Yenileme belirteci oluşturulur
+        token.RefreshToken = CreateRefreshToken();
+        
         return token;
     }
+
+    // Yenileme belirteci oluşturma işlemi
+    public string CreateRefreshToken()
+    {
+        // 32 byte uzunluğunda rastgele bir dizi oluşturulur.
+        byte[] number = new byte[32];
+        // Rastgele sayı üreteci oluşturulur.
+        using RandomNumberGenerator random = RandomNumberGenerator.Create();
+        // Rastgele sayılar oluşturulur.
+        random.GetBytes(number);
+        // Oluşturulan rastgele sayılar base64 formatına dönüştürülerek yenileme belirtecine atanır.
+        return Convert.ToBase64String(number);
+    }
 }
+
          * 
          */
     }
