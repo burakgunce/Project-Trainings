@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <Folder Include="Core\Domain\" />
-    <Folder Include="Presentation\Api\" />
   </ItemGroup>
 
 </Project>
