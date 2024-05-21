@@ -63,6 +63,99 @@ public class MailService : IMailService
         // E-postayı gönderir.
         await smtp.SendMailAsync(mail);
     }
+
+        // SendPasswordResetMailAsync metodu, belirtilen e-posta adresine şifre yenileme bağlantısı içeren bir e-posta gönderir.
+public async Task SendPasswordResetMailAsync(string to, string userId, string resetToken)
+{
+    // E-posta içeriğini oluşturmak için StringBuilder kullanılır.
+    StringBuilder mail = new();
+    
+    // E-posta içeriğine HTML formatında metin ekler.
+    mail.AppendLine("Merhaba<br>Eğer yeni şifre talebinde bulunduysanız aşağıdaki linkten şifrenizi yenileyebilirsiniz.<br><strong><a target=\"_blank\" href=\"");
+    
+    // E-posta içeriğine Angular istemci URL'sini ekler. Bu URL, yapılandırma dosyasından alınır.
+    mail.AppendLine(_configuration["AngularClientUrl"]);
+    
+    // Angular istemci URL'sine şifre yenileme yolunu ekler.
+    mail.AppendLine("/update-password/");
+    
+    // URL'ye kullanıcı kimliğini ekler.
+    mail.AppendLine(userId);
+    
+    // URL'ye şifre yenileme jetonunu ekler.
+    mail.AppendLine("/");
+    mail.AppendLine(resetToken);
+    
+    // E-posta içeriğine bağlantıyı tamamlar ve kullanıcıya tıklaması için talimat verir.
+    mail.AppendLine("\">Yeni şifre talebi için tıklayınız...</a></strong><br><br><span style=\"font-size:12px;\">NOT : Eğer ki bu talep tarafınızca gerçekleştirilmemişse lütfen bu maili ciddiye almayınız.</span><br>Saygılarımızla...<br><br><br>BG");
+
+    // Hazırlanan e-posta içeriğini kullanarak e-posta gönderme işlemini gerçekleştirir.
+    await SendMailAsync(to, "Şifre Yenileme Talebi", mail.ToString());
+}
+
+
+        ////////// auth service de olan bazı gerekli metodlar
+        
+        // PasswordResetAsync metodu, kullanıcının e-posta adresine şifre yenileme bağlantısı göndermek için kullanılır.
+public async Task PasswordResetAsync(string email)
+{
+    // Kullanıcıyı e-posta adresine göre arar.
+    AppUser user = await _userManager.FindByEmailAsync(email);
+    
+    // Kullanıcı bulunursa, if bloğu içindeki işlemler gerçekleştirilir.
+    if (user != null)
+    {
+        // Kullanıcı için bir şifre yenileme jetonu oluşturulur.
+        string resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+        // Jetonun URL dostu bir formatta olmasını sağlamak için kodlanır.
+        // Önceki iki satır yoruma alınmış ve alternatif olarak UrlEncode kullanılmıştır.
+        // byte[] tokenBytes = Encoding.UTF8.GetBytes(resetToken);
+        // resetToken = WebEncoders.Base64UrlEncode(tokenBytes);
+        resetToken = resetToken.UrlEncode();
+
+        // Kullanıcının e-posta adresine şifre yenileme bağlantısı içeren e-posta gönderilir.
+        await _mailService.SendPasswordResetMailAsync(email, user.Id, resetToken);
+    }
+
+        //////GeneratePasswordResetTokenAsync(user); bu metod için configs de bir servis eklemen lazım ki üretebilsin
+}
+
+
+
+        // VerifyResetTokenAsync metodu, verilen şifre yenileme jetonunun geçerliliğini doğrulamak için kullanılır.
+public async Task<bool> VerifyResetTokenAsync(string resetToken, string userId)
+{
+    // Kullanıcıyı kimliğine göre arar.
+    AppUser user = await _userManager.FindByIdAsync(userId);
+    
+    // Kullanıcı bulunursa, if bloğu içindeki işlemler gerçekleştirilir.
+    if (user != null)
+    {
+        // Jetonun URL dostu formatını geri çevirmek için kodu çözülür.
+        // Önceki iki satır yoruma alınmış ve alternatif olarak UrlDecode kullanılmıştır.
+        // byte[] tokenBytes = WebEncoders.Base64UrlDecode(resetToken);
+        // resetToken = Encoding.UTF8.GetString(tokenBytes);
+        resetToken = resetToken.UrlDecode();
+
+        // Jetonun geçerliliğini doğrulamak için UserManager'ın VerifyUserTokenAsync metodu kullanılır.
+        // Parametreler:
+        // - user: Doğrulanacak kullanıcı nesnesi.
+        // - _userManager.Options.Tokens.PasswordResetTokenProvider: Şifre yenileme jetonu sağlayıcısı.
+        // - "ResetPassword": Jetonun tipi (şifre sıfırlama).
+        // - resetToken: Doğrulanacak jeton.
+        return await _userManager.VerifyUserTokenAsync(user, _userManager.Options.Tokens.PasswordResetTokenProvider, "ResetPassword", resetToken);
+    }
+
+    // Kullanıcı bulunamazsa, false döner.
+    return false;
+}
+
+
+        // userserviste updatepassword ile daha sonra securitystamp propunu ezeceksin ki reset mailine sürekli girilemesin cunku refresh token degısmı olacak 
+
+
+
 }
 
          * 
